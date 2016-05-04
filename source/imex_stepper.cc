@@ -196,7 +196,7 @@ unsigned int IMEXStepper<VEC>::start_ode(VEC &solution, VEC &solution_dot)
     return this->interface.create_new_vector();
   };
 
-  std::function<int(const VEC &, VEC &)> my_residual = [&] (const VEC &y, VEC &res)
+  std::function<int(const VEC &, VEC &)> my_residual = [this, &residual, &solution, &solution_dot, &previous_solution, &t] (const VEC &y, VEC &res)
   {
     double a = this->get_alpha();
     compute_y_dot(y,*previous_solution,a,solution_dot);
@@ -206,14 +206,14 @@ unsigned int IMEXStepper<VEC>::start_ode(VEC &solution, VEC &solution_dot)
     return ret;
   };
 
-  std::function<int(const VEC &)> my_jac = [&] (const VEC &y)
+  std::function<int(const VEC &)> my_jac = [this, &residual, &solution, &solution_dot, &previous_solution, &t] (const VEC &y)
   {
     double a = this->get_alpha();
     compute_y_dot(y,*previous_solution,a,solution_dot);
     return this->interface.setup_jacobian(t,y,solution_dot,*residual,a);
   };
 
-  std::function<int(const VEC &, VEC &)> my_solve = [&] (const VEC &res, VEC &dst)
+  std::function<int(const VEC &, VEC &)> my_solve = [this, &residual, &solution, &solution_dot, &rhs, &t] (const VEC &res, VEC &dst)
   {
     double a = this->get_alpha();
     *rhs = *residual;
@@ -221,7 +221,7 @@ unsigned int IMEXStepper<VEC>::start_ode(VEC &solution, VEC &solution_dot)
     return this->interface.solve_jacobian_system(t,solution,solution_dot,res,a,*rhs,dst);
   };
 
-  std::function<int(const VEC &, VEC &)> my_jacobian_vmult = [&] (const VEC &v, VEC &dst )
+  std::function<int(const VEC &, VEC &)> my_jacobian_vmult = [this] (const VEC &v, VEC &dst )
   {
     return this->interface.jacobian_vmult(v,dst);
   };
