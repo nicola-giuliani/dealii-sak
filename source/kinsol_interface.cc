@@ -33,8 +33,13 @@
 #endif
 
 #include <deal2lkit/utilities.h>
+#if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
 #include <kinsol/kinsol_dense.h>
-
+#else
+#include <kinsol/kinsol_direct.h>
+#include <sunlinsol/sunlinsol_dense.h>
+#include <sunmatrix/sunmatrix_dense.h>
+#endif
 D2K_NAMESPACE_OPEN
 
 // protect the helper functions
@@ -317,14 +322,23 @@ void KINSOLInterface<VEC>::initialize_solver( VEC &initial_guess )
 
 
   if (use_internal_solver)
-    status = KINDense(kin_mem, system_size );
+  {
+      SUNMatrix       J  = nullptr;
+      SUNLinearSolver LS = nullptr;
+      J      = SUNDenseMatrix(system_size, system_size);
+      LS     = SUNDenseLinearSolver(u_scale, J);
+      status = KINDlsSetLinearSolver(kin_mem, LS, J);
+    // status = KINDense(kin_mem, system_size );
+  }
   else
     {
       KINMem KIN_mem;
       KIN_mem = (KINMem) kin_mem;
       KIN_mem->kin_lsetup = kinsol_setup_jacobian<VEC>;
       KIN_mem->kin_lsolve = kinsol_solve_linear_system<VEC>;
+      #  if DEAL_II_SUNDIALS_VERSION_LT(3, 0, 0)
       KIN_mem->kin_setupNonNull = true;
+      #  endif
     }
   is_initialized = true;
 
