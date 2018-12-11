@@ -445,7 +445,7 @@ void IDAInterface<VEC>::reset_dae(double current_time,
 
   IDA_mem->ida_lsetup = t_dae_lsetup<VEC>;
   IDA_mem->ida_lsolve = t_dae_solve<VEC>;
-  #if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
+  #if DEAL_II_SUNDIALS_VERSION_LT(4,0,0)
   IDA_mem->ida_setupNonNull = true;
   #else
   IDA_mem->ida_SetupDone = true;

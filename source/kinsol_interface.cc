@@ -33,13 +33,14 @@
 #endif
 
 #include <deal2lkit/utilities.h>
-#if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
+// #if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
 #include <kinsol/kinsol_dense.h>
-#else
-#include <kinsol/kinsol_direct.h>
-#include <sunlinsol/sunlinsol_dense.h>
-#include <sunmatrix/sunmatrix_dense.h>
-#endif
+#include <kinsol/kinsol_spgmr.h>
+// #else
+// #include <kinsol/kinsol_direct.h>
+// #include <sunlinsol/sunlinsol_dense.h>
+// #include <sunmatrix/sunmatrix_dense.h>
+// #endif
 D2K_NAMESPACE_OPEN
 
 // protect the helper functions
@@ -65,6 +66,46 @@ namespace
     copy(res, *loc_res);
     return ret;
   }
+
+  template<typename VEC>
+  int kinsol_jacobian_vmult( N_Vector v, N_Vector Jv, N_Vector u, booleantype new_u, void *user_data)
+  {
+
+    KINSOLInterface<VEC> &solver = *static_cast<KINSOLInterface<VEC> *>(user_data);
+
+
+    shared_ptr<VEC> loc_jv = solver.create_new_vector();
+    shared_ptr<VEC> loc_v = solver.create_new_vector();
+
+    copy(*loc_jv, Jv);
+    copy(*loc_v, v);
+
+    int ret = solver.jacobian_vmult(*loc_v, *loc_jv);
+
+    copy(Jv, *loc_jv);
+    return ret;
+  }
+
+//   template<typename VEC>
+//   int kinsol_jacobian_prec_vmult(N_Vector u, N_Vector uscale,
+// N_Vector fval, N_Vector fscale,
+// N_Vector v, void *user data, N_Vector tmp)
+//   {
+//
+//     KINSOLInterface<VEC> &solver = *static_cast<KINSOLInterface<VEC> *>(user_data);
+//
+//
+//     shared_ptr<VEC> loc_y = solver.create_new_vector();
+//     shared_ptr<VEC> loc_res = solver.create_new_vector();
+//
+//     copy(*loc_y, y);
+//     copy(*loc_res, res);
+//
+//     int ret = solver.jacobian_prec_vmult(*loc_y, *loc_res);
+//
+//     copy(res, *loc_res);
+//     return ret;
+//   }
 
   /** helper function to interface setup_jacobian to sundials */
   template<typename VEC>
@@ -152,6 +193,13 @@ void KINSOLInterface<VEC>::set_functions_to_trigger_an_assert()
     AssertThrow(false, ExcPureFunctionCalled());
     return ret;
   };
+
+  // jacobian_prec_vmult = [](const VEC &, VEC &) ->int
+  // {
+  //   int ret =0;
+  //   AssertThrow(false, ExcPureFunctionCalled());
+  //   return ret;
+  // };
 
 }
 
@@ -249,7 +297,22 @@ void KINSOLInterface<VEC>::declare_parameters(ParameterHandler &prm)
   add_parameter(prm, &use_internal_solver,
                 "Use internal KINSOL direct solver", "false",
                 Patterns::Bool(),
-                "If true the dense direct linear solver of KINSOL is used");
+                "If true internal KINSOL solver are used");
+
+  add_parameter(prm, &use_iterative,
+                "Use internal iterative KINSOL direct solver", "false",
+                Patterns::Bool(),
+                "If false the dense direct linear solver of KINSOL is used");
+
+  add_parameter(prm, &provide_jacobian,
+                "Provide Jacobian vmult", "false",
+                Patterns::Bool(),
+                " ");
+
+  add_parameter(prm, &provide_jacobian_preconditioner,
+                "Provide Jacobian preconditioner", "false",
+                Patterns::Bool(),
+                " ");
 
 }
 
@@ -320,15 +383,35 @@ void KINSOLInterface<VEC>::initialize_solver( VEC &initial_guess )
   status = KINSetMaxSetupCalls(kin_mem, mbset);
   Assert(status == KIN_SUCCESS, ExcMessage("Error intializing KINSOL. KINSetMaxSetupCalls failed."));
 
-
+  std::cout<<"MAREMMA PORCA"<<std::endl;
   if (use_internal_solver)
   {
-      SUNMatrix       J  = nullptr;
-      SUNLinearSolver LS = nullptr;
-      J      = SUNDenseMatrix(system_size, system_size);
-      LS     = SUNDenseLinearSolver(u_scale, J);
-      status = KINDlsSetLinearSolver(kin_mem, LS, J);
-    // status = KINDense(kin_mem, system_size );
+      // #if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
+      if(use_iterative)
+      {
+        if(provide_jacobian)
+        {
+          auto sstatus = KINSpilsJacTimesVecFn(kin_mem, kinsol_jacobian_vmult<VEC>);
+          status = sstatus;
+          // if(provide_jacobian_preconditioner)
+          //   status = KINSpilsPrecSolveFn(kin_mem, kinsol_jacobian_prec_vmult<VEC>)
+        }
+        status = KINSpgmr(kin_mem, system_size);
+
+      }
+      else
+      {
+        std::cout<<"Initializing internal kinsol"<<std::endl;
+        status = KINDense(kin_mem, system_size );
+      }
+      // #else
+      //
+      //       SUNMatrix       J  = nullptr;
+      //       SUNLinearSolver LS = nullptr;
+      //       J      = SUNDenseMatrix(system_size, system_size);
+      //       LS     = SUNDenseLinearSolver(u_scale, J);
+      //       status = KINDlsSetLinearSolver(kin_mem, LS, J);
+      // #endif
   }
   else
     {
@@ -336,9 +419,9 @@ void KINSOLInterface<VEC>::initialize_solver( VEC &initial_guess )
       KIN_mem = (KINMem) kin_mem;
       KIN_mem->kin_lsetup = kinsol_setup_jacobian<VEC>;
       KIN_mem->kin_lsolve = kinsol_solve_linear_system<VEC>;
-      #  if DEAL_II_SUNDIALS_VERSION_LT(3, 0, 0)
+      // #  if DEAL_II_SUNDIALS_VERSION_LT(3, 0, 0)
       KIN_mem->kin_setupNonNull = true;
-      #  endif
+      // #  endif
     }
   is_initialized = true;
 
@@ -469,7 +552,7 @@ void KINSOLInterface<VEC>::set_constraint_vector( const VEC &constraint )
 
 D2K_NAMESPACE_CLOSE
 
-template class deal2lkit::KINSOLInterface<BlockVector<double> >;
+// template class deal2lkit::KINSOLInterface<BlockVector<double> >;
 
 #ifdef DEAL_II_WITH_MPI
 

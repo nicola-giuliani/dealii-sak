@@ -33,7 +33,7 @@
 
 #include <ida/ida.h>
 #include <ida/ida_spils.h>
-#if DEAL_II_SUNDIALS_VERSION_LT(3,0,0)
+#if DEAL_II_SUNDIALS_VERSION_LT(4,0,0)
 #include <ida/ida_spgmr.h>
 #include <ida/ida_spbcgs.h>
 #include <ida/ida_sptfqmr.h>

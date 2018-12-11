@@ -210,6 +210,10 @@ private:
    */
   bool use_internal_solver;
 
+  bool use_iterative;
+
+  bool provide_jacobian, provide_jacobian_preconditioner;
+
   /**
    * KINSOL solution vector.
    * After initialize_solver is called this contains the initial guess.
